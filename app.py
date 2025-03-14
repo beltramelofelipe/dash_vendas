@@ -4,7 +4,7 @@ import plotly.express as px
 import pandas as pd
 import random
 import datetime
-from dash import html, dcc, Input, Output
+from dash import html, dcc
 
 # Inicializar a aplicação Dash
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"])
@@ -26,7 +26,7 @@ def create_kpi_card(title, value1, value2, label1, label2, icon):
             [
                 html.Div(
                     [
-                        html.I(className=f"fa {icon} fa-2x", style={"color": "#32CD32"}),  # Verde claro
+                        html.I(className=f"fa {icon} fa-2x", style={"color": "#D90718"}),
                         html.H5(title, className="card-title", style={"margin": "0", "font-size": "16px"}),
                     ],
                     style={"display": "flex", "align-items": "center", "gap": "8px", "justify-content": "center"},
@@ -35,15 +35,15 @@ def create_kpi_card(title, value1, value2, label1, label2, icon):
                     [
                         html.Div(
                             [
-                                html.H2(value1, style={"color": "#D90718", "font-size": "20px", "margin": "0"}),  # Verde claro
-                                html.P(label1, className="card-text", style={"font-size": "12px", "color": "gray", "margin": "0"}),
+                                html.H2(value1, style={"color": "#D90718", "font-size": "20px", "margin": "0"}),
+                                html.P(label1, className="card-text", style={"font-size": "12px", "color": "#0D0D0D", "margin": "0"}),
                             ],
                             style={"text-align": "center"},
                         ),
                         html.Div(
                             [
-                                html.H2(value2, style={"color": "#0D0D0D", "font-size": "18px", "margin": "0"}),  # Verde claro
-                                html.P(label2, className="card-text", style={"font-size": "12px", "color": "gray", "margin": "0"}),
+                                html.H2(value2, style={"color": "#0D0D0D", "font-size": "18px", "margin": "0"}),
+                                html.P(label2, className="card-text", style={"font-size": "12px", "color": "#0D0D0D", "margin": "0"}),
                             ],
                             style={"text-align": "center"},
                         ),
@@ -60,7 +60,8 @@ def create_kpi_card(title, value1, value2, label1, label2, icon):
             "padding": "10px",
             "display": "flex",
             "flexDirection": "column",
-            "justifyContent": "center"
+            "justifyContent": "center",
+            "backgroundColor": "#F2F2F2"
         },
     )
 
@@ -82,48 +83,24 @@ app.layout = dbc.Container(
             className="mb-4 justify-content-center",
         ),
 
-        # Seletor de intervalo de datas
-        dbc.Row(
-            dbc.Col(
-                dcc.DatePickerRange(
-                    id="date-picker",
-                    min_date_allowed=min(datas),
-                    max_date_allowed=max(datas),
-                    start_date=min(datas),
-                    end_date=max(datas),
-                    display_format="DD/MM/YYYY",
-                    style={"margin-bottom": "20px"}
-                ),
-                width={"size": 6, "offset": 3},
-            ),
-            className="mb-4",
-        ),
-
         # Gráfico de vendas (de colunas)
         dbc.Row(
             dbc.Col(dcc.Graph(id="bar-chart"), width=12),
         ),
     ],
     className="mt-4",
+    style={"backgroundColor": "#FFFFFF"}
 )
 
-# Callback para atualizar o gráfico com base no intervalo de datas selecionado
+# Criar gráfico de colunas
+fig = px.bar(df_vendas, x="Data", y="Vendas", title="Total de Vendas por Dia", text_auto=True, color_discrete_sequence=["#D90718"])
+fig.update_layout(template="plotly_white", height=400)
+
 @app.callback(
-    Output("bar-chart", "figure"),
-    [Input("date-picker", "start_date"), Input("date-picker", "end_date")]
+    dash.Output("bar-chart", "figure"),
+    [dash.Input("bar-chart", "id")]
 )
-def update_chart(start_date, end_date):
-    # Converter start_date e end_date para datetime.date
-    start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
-    end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-
-    # Filtrar os dados com base no intervalo de datas selecionado
-    df_filtered = df_vendas[(df_vendas["Data"] >= start_date) & (df_vendas["Data"] <= end_date)]
-
-    # Criar gráfico de colunas com cor verde claro
-    fig = px.bar(df_filtered, x="Data", y="Vendas", title="Total de Vendas por Dia", text_auto=True, color_discrete_sequence=["#32CD32"])
-    fig.update_layout(template="plotly_white", height=400)
-
+def update_chart(_):
     return fig
 
 # Rodar o aplicativo
