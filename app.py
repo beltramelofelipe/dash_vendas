@@ -67,7 +67,7 @@ def create_kpi_card(title, value1, value2, label1, label2, icon):
 # Layout do aplicativo
 app.layout = dbc.Container(
     [
-        html.H1("Dashboard de KPIs", style={"textAlign": "center"}),
+        html.H1("Vendas SN", style={"textAlign": "center"}),
         html.Hr(),
 
         # Linha de KPIs
