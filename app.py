@@ -35,7 +35,7 @@ def create_kpi_card(title, value1, value2, label1, label2, icon):
                     [
                         html.Div(
                             [
-                                html.H2(value1, style={"color": "#32CD32", "font-size": "20px", "margin": "0"}),  # Verde claro
+                                html.H2(value1, style={"color": " #D90718", "font-size": "20px", "margin": "0"}),  # Verde claro
                                 html.P(label1, className="card-text", style={"font-size": "12px", "color": "gray", "margin": "0"}),
                             ],
                             style={"text-align": "center"},
