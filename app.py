@@ -2,24 +2,97 @@ import dash
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
-import random
 import datetime
 from dash import html, dcc
+from google.cloud import bigquery
+import os
+
+# Configurar credenciais do BigQuery
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (r'bi-sndb.json')
 
 # Inicializar a aplicação Dash
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-# Gerar dados fictícios para o gráfico de vendas
-num_dias = 30  # Últimos 30 dias
-hoje = datetime.date.today()
-datas = [hoje - datetime.timedelta(days=i) for i in range(num_dias)]
-vendas = [random.randint(10000, 50000) for _ in range(num_dias)]
+# Conectar ao BigQuery e obter os dados
+project_id = 'bi-sndb'
+client = bigquery.Client(project=project_id)
 
-# Criar DataFrame com as datas e vendas
-df_vendas = pd.DataFrame({"Data": datas, "Vendas": vendas})
-df_vendas = df_vendas.sort_values(by="Data")  # Ordenar por data
+query = """
+    SELECT * FROM `bi-sndb.bi_sn.dash_transacoes_mensais`
+"""
+query_job = client.query(query)
+results = query_job.result()
+data = [dict(row) for row in results]
+df_vendas_total = pd.DataFrame(data)
 
-# Função para criar um Card KPI bem alinhado
+hoje = datetime.datetime.today()
+ano_mes_atual = hoje.strftime("%Y-%m")
+
+df_vendas_total = df_vendas_total.sort_values(by="ano_mes")
+
+# Obter dados do mês anterior
+mes_anterior = (hoje - datetime.timedelta(days=30)).strftime("%Y-%m")
+df_mes_anterior = df_vendas_total[df_vendas_total["ano_mes"] == mes_anterior]
+
+# Se o mês anterior não tiver dados, usar 1 para evitar divisão por zero
+faturamento_anterior = df_mes_anterior["aprovadas"].sum() if not df_mes_anterior.empty else 1
+produtos_anterior = df_mes_anterior["qtd_produto"].sum() if not df_mes_anterior.empty else 1
+clientes_anterior = df_mes_anterior["novos_clientes"].sum() if not df_mes_anterior.empty else 1
+
+
+
+
+df_vendas = df_vendas_total[df_vendas_total["ano_mes"] == ano_mes_atual]
+# Se o DataFrame estiver vazio, preencher com valores padrão
+if df_vendas.empty:
+    df_vendas = pd.DataFrame({
+        "ano_mes": [ano_mes_atual],
+        "aprovadas": [0],
+        "qtd_transacoes": [1],
+        "qtd_produto": [0],
+        "novos_clientes": [0],
+        "reembolso": [0]
+    })
+
+# Calcular métricas derivadas
+total_faturamento = round(df_vendas["aprovadas"].sum(), -1)
+total_vendas = df_vendas["qtd_transacoes"].sum()
+total_produtos = df_vendas["qtd_produto"].sum()
+total_clientes_novos = df_vendas["novos_clientes"].sum()
+total_reembolsos = round(df_vendas["reembolso"].sum(), -1)
+
+
+# Calcular crescimento MoM
+crescimento_faturamento = ((total_faturamento - faturamento_anterior) / faturamento_anterior) * 100
+crescimento_produtos = ((total_produtos - produtos_anterior) / produtos_anterior) * 100
+crescimento_clientes = ((total_clientes_novos - clientes_anterior) / clientes_anterior) * 100
+
+# Formatar crescimento
+def format_growth(value):
+    if value > 0:
+        return f"📈 +{value:.1f}%"
+    elif value < 0:
+        return f"📉 {value:.1f}%"
+    else:
+        return f"➖ {value:.1f}%"
+    
+growth_faturamento = format_growth(crescimento_faturamento)
+growth_produtos = format_growth(crescimento_produtos)
+growth_clientes = format_growth(crescimento_clientes)
+
+# Calcular Ticket Médio e Taxa de Reembolso
+ticket_medio = total_faturamento / total_vendas if total_vendas > 0 else 0
+taxa_reembolso = (total_reembolsos / total_faturamento) * 100 if total_faturamento > 0 else 0
+
+# Formatar valores para exibição
+def format_currency(value):
+    return f"R$ {value:,.0f}".replace(",", ".")
+
+def format_percent(value):
+    return f"{value:.2f}%"
+
+
+# Criar Card KPI
 def create_kpi_card(title, value1, value2, label1, label2, icon):
     return dbc.Card(
         dbc.CardBody(
@@ -74,16 +147,43 @@ app.layout = dbc.Container(
         # Linha de KPIs
         dbc.Row(
             [
-                dbc.Col(create_kpi_card("Faturamento", "R$ 1.250.000", "12.5%", "Total", "Crescimento", "fa-dollar-sign"), width=2),
-                dbc.Col(create_kpi_card("Qtd Vendas", "7.200", "R$ 350", "Total", "Ticket Médio", "fa-shopping-cart"), width=2),
-                dbc.Col(create_kpi_card("Produtos Vendidos", "15.000", "10%", "Total", "Aumento", "fa-box"), width=2),
-                dbc.Col(create_kpi_card("Clientes Novos", "1.500", "7 dias", "Total", "Média de Retenção", "fa-user-plus"), width=2),
-                dbc.Col(create_kpi_card("Reembolso", "R$ 150.000", "8.2%", "Valor Total", "Porcentagem", "fa-hand-holding-usd"), width=2),
+                dbc.Col(create_kpi_card("Faturamento", 
+                                        format_currency(total_faturamento),
+                                        growth_faturamento, 
+                                        "Total", 
+                                        "Crescimento MoM",
+                                        "fa-dollar-sign"),
+                                        width=2),
+                dbc.Col(create_kpi_card("Qtd Vendas", 
+                                        f"{total_vendas:,}".replace(",", "."), 
+                                        format_currency(ticket_medio), 
+                                        "Total",
+                                         "Ticket Médio", 
+                                         "fa-shopping-cart"), 
+                                         width=2),
+                dbc.Col(create_kpi_card("Produtos Vendidos",
+                                        f"{total_produtos:,}".replace(",", "."), 
+                                        growth_produtos, 
+                                        "Total",
+                                        "Crescimento MoM", 
+                                        "fa-box"), width=2),
+                dbc.Col(create_kpi_card("Clientes Novos",
+                                         f"{total_clientes_novos:,}".replace(",", "."),
+                                           growth_clientes, 
+                                           "Total",
+                                            "Crescimento MoM", 
+                                            "fa-user-plus"), width=2),
+                dbc.Col(create_kpi_card("Reembolso", 
+                                        format_currency(total_reembolsos),
+                                          format_percent(taxa_reembolso), 
+                                          "Valor Total", 
+                                          "Porcentagem", 
+                                          "fa-hand-holding-usd"), width=2),
             ],
             className="mb-4 justify-content-center",
         ),
 
-        # Gráfico de vendas (de colunas)
+        # Gráfico de vendas
         dbc.Row(
             dbc.Col(dcc.Graph(id="bar-chart"), width=12),
         ),
@@ -93,9 +193,32 @@ app.layout = dbc.Container(
 )
 
 # Criar gráfico de colunas
-fig = px.bar(df_vendas, x="Data", y="Vendas", title="Total de Vendas por Dia", text_auto=True, color_discrete_sequence=["#D90718"])
-fig.update_layout(template="plotly_white", height=400)
+fig = px.bar(
+    df_vendas_total,
+    x="ano_mes",
+    y="aprovadas",
+    title="Total de Vendas por Mês-Ano",
+    text=df_vendas_total["aprovadas"].apply(lambda x: f"{x/1_000_000:.1f}MM" if x >= 1_000_000 else f"{x/1_000:.0f}K"),
+    color_discrete_sequence=["#D90718"]
+)
 
+# Ajustar layout para rótulos na horizontal e bem posicionados
+fig.update_traces(textposition='outside')  
+max_value = df_vendas_total["aprovadas"].max()
+y_axis_limit = max_value * 1.1  # Adiciona 10% para evitar sobreposição
+
+fig.update_layout(
+    yaxis=dict(
+        title="aprovadas",
+        range=[0, y_axis_limit],  # Ajusta o eixo Y para evitar sobreposição
+        tickformat=".1s"  # Mantém a formatação em K e MM
+    )
+)
+fig.update_layout(
+    plot_bgcolor="white",  # Fundo branco no gráfico
+    paper_bgcolor="white",  # Fundo branco no espaço ao redor
+    yaxis=dict(showgrid=False),  # Remove linhas de grade se necessário
+)
 @app.callback(
     dash.Output("bar-chart", "figure"),
     [dash.Input("bar-chart", "id")]
