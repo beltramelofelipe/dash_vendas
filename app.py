@@ -8,7 +8,7 @@ from google.cloud import bigquery
 import os
 
 # Configurar credenciais do BigQuery
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (r'bi-sndb.json')
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (r'bi-sndb.json')
 
 # Inicializar a aplicação Dash
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
